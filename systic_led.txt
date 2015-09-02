@@ -1,0 +1,61 @@
+#include <stdlib.h>
+#include <stdint.h>
+#include <stddef.h>
+#include <stdio.h>
+#include <stdbool.h>
+#include "chip.h"
+
+int i = 0;
+volatile bool pravda = false;
+/*****************************************************************************
+ * Private functions
+ ****************************************************************************/
+void delay(uint32_t i);
+
+/* Delay in miliseconds  (cclk = 120MHz) */
+void delayMs(uint32_t ms)
+{
+	delay(ms * 40000);
+}
+
+void __lpc1788_isr_systick(void)
+{
+	i++;
+	if(i == 10){
+		pravda = true;
+		i = 0;
+	}
+}
+
+int main(void)
+{
+	//***********************************************
+		// Inicializace
+		//***********************************************
+	// Inicializace hodin pro blok iocon, gpio
+		Chip_IOCON_Init(LPC_IOCON);
+		Chip_GPIO_Init(LPC_GPIO);
+
+
+		Chip_IOCON_PinMuxSet(LPC_IOCON, 0, 3, (IOCON_FUNC0 | IOCON_MODE_INACT));
+
+		Chip_IOCON_PinMuxSet(LPC_IOCON, 2, 3, (IOCON_FUNC0 | IOCON_MODE_INACT));
+
+		Chip_GPIO_SetPinDIROutput(LPC_GPIO, 2, 3);
+
+		Chip_GPIO_SetPinOutLow(LPC_GPIO, 2, 3);
+		/* Enable and setup SysTick Timer at a periodic rate */
+		SysTick_Config(120000000 / 10);
+		//***********************************************
+		// Hlavni smycka
+		//***********************************************
+		while (1) {
+			if(pravda){
+				Chip_GPIO_SetPinToggle(LPC_GPIO, 2, 3);
+				pravda = false;
+			}
+
+		}
+	return EXIT_FAILURE;
+}
+
