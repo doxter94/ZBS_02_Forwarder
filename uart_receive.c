@@ -71,6 +71,10 @@ void uart_debug(const char * text, LPC_USART_T *pUART){
  * Initialization
  ****************************************************************************/
 
+/* Init seriové linky a pinů určených k přenosu dat
+ * Nastavení UARTu: 115.2K8N1
+ *  FIFO lvl3 - 14 znaků
+ *  */
 void setup_uarts(){
 
 	/* UART0 set up */
@@ -129,9 +133,9 @@ void setup_uarts(){
  ****************************************************************************/
 
 /*
- * UART0 - Test UARTu0
- * UART2 - Konektory J4 - 5 na desce
- * UART4 - Debug test (konektory J6 - 7)
+ * UART0 - Pro test UARTu0
+ * UART2 - Pro konektory J4 - 5 na desce
+ * UART4 - Pro debug test (konektory J6 - 7)
  *
  * Přijímání dat po bajtu od zařízení jennic a ukládání
  * do kruhového bufferu
@@ -161,7 +165,13 @@ void __lpc1788_isr_uart4(void) {
 		buf_uart.producer = (buf_uart.producer + 1)% MAX_LENGHT;
 	}
 }
-/*  */
+
+/* Přeposílání jednotlivých zpráv na ethernet
+ *
+ * Každá přijatá zpráva ukončená znakem 0x0A
+ * se odesílá jednotlivě se zpožděním
+ * kvůli synchronizaci přenosu
+ *  */
 void ethernet_transmit(){
 	while(!empty_buffer(&buf_uart)){
 		/* Kontrola dat v bufferu */

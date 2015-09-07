@@ -167,7 +167,11 @@ void enet_setup(){
 }
 
 
-/* Calculate the IP header checksum */
+/* Vypočítání IP checksumu
+ * Parametry:
+ * 	buf - pole obsahující IP hlavičku ke zpracování
+ * 	size - velikost přijatých dat
+ * */
 uint16_t ip_header_checksum(const uint8_t *buf, unsigned size)
 {
 	 uint8_t p[size];
@@ -217,7 +221,11 @@ uint16_t udp_header_checksum(const uint16_t source_ip, const uint16_t destinatio
 }
 
 
-/* Send UDP packet */
+/* Poslání UDP packetu
+ * Parametry:
+ * 	data - pole obsahující data k odeslání
+ * 	length - délka přijatých dat
+ *  */
 bool UDP_packet_send(char * data, uint8_t length){
 	static uint16_t ip_checksum; //calc later
 	//static uint16_t udp_checksum; //calc later
@@ -299,9 +307,13 @@ bool UDP_packet_send(char * data, uint8_t length){
 	return ENET_IsTXFinish();
 
 }
-
+/* Základní ethernetová inicializace
+ * - Nastavení všech pinů
+ * - MAC konfigurace 100Mbps
+ * - Nastavení MII frekvence hodin a PHY adresy
+ * - Nastavení deskriptorů a povolení RX/TX
+ * */
 void enet_init(){
-	/* Ethernet pins init*/
 	Chip_IOCON_PinMuxSet(LPC_IOCON, 0x1, 0, (IOCON_FUNC1 | IOCON_MODE_INACT));
 	Chip_IOCON_PinMuxSet(LPC_IOCON, 0x1, 1, (IOCON_FUNC1 | IOCON_MODE_INACT));
 	Chip_IOCON_PinMuxSet(LPC_IOCON, 0x1, 4, (IOCON_FUNC1 | IOCON_MODE_INACT));
