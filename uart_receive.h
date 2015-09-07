@@ -3,5 +3,8 @@
 
 void setup_uarts();
 
+void ethernet_transmit();
+
+void uart_debug(const char * text, LPC_USART_T *pUART);
 
 #endif /* UART_RECEIVE_H_ */

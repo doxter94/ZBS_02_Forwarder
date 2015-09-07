@@ -219,7 +219,6 @@ uint16_t udp_header_checksum(const uint16_t source_ip, const uint16_t destinatio
 
 /* Send UDP packet */
 bool UDP_packet_send(char * data, uint8_t length){
-
 	static uint16_t ip_checksum; //calc later
 	//static uint16_t udp_checksum; //calc later
 	const uint8_t total_length = length + 28;
@@ -294,6 +293,7 @@ bool UDP_packet_send(char * data, uint8_t length){
 	memcpy(buffer + 42,data,length); // data (42 - ...)
 
 	ENET_TXQueue(42 + length);
+
 	identification++;
 
 	return ENET_IsTXFinish();
@@ -301,7 +301,7 @@ bool UDP_packet_send(char * data, uint8_t length){
 }
 
 void enet_init(){
-	/* ENET */
+	/* Ethernet pins init*/
 	Chip_IOCON_PinMuxSet(LPC_IOCON, 0x1, 0, (IOCON_FUNC1 | IOCON_MODE_INACT));
 	Chip_IOCON_PinMuxSet(LPC_IOCON, 0x1, 1, (IOCON_FUNC1 | IOCON_MODE_INACT));
 	Chip_IOCON_PinMuxSet(LPC_IOCON, 0x1, 4, (IOCON_FUNC1 | IOCON_MODE_INACT));
