@@ -20,6 +20,7 @@
 
 #define LAST_CHAR	0x0A
 #define FIRST_CHAR	0x23
+#define CONFIG_CHAR	0x43
 #define MAX_LENGHT	254
 #define PROTOCOL_LENGTH	25
 /* Page used for storage */
@@ -99,20 +100,34 @@ void uart_debug(const char * text, LPC_USART_T *pUART){
 	Chip_UART_SendBlocking(pUART, text, numBytes);
 }
 
+/* Zápis do paměti eeprom podle určeného protokolu. */
+void eeprom_write(){
+	if(eeprom_lenght >= PROTOCOL_LENGTH){
+		static uint8_t count = 0;
+		if(eeprom_buffer[count] == CONFIG_CHAR){
+			Chip_EEPROM_Write(LPC_EEPROM, 0, PAGE_ADDR, eeprom_buffer + count, EEPROM_RWSIZE_8BITS, eeprom_lenght - count);
+			memset(eeprom_buffer,0,eeprom_lenght); // Vynulování dat v bufferu
+			eeprom_lenght = 0;
+		} else{
+			count++;
+		}
+	}
+}
+
 /*****************************************************************************
  * Initialization
  ****************************************************************************/
 
+/* Init EEPROM */
 void eeprom_init(){
 
-	/* Init EEPROM */
 	Chip_EEPROM_Init(LPC_EEPROM);
 
 }
 
 /* Init seriové linky a pinů určených k přenosu dat
- * Nastavení UARTu: 115.2K8N1
- *  FIFO lvl3 - 14 znaků
+ * Nastavení UARTu: 115.2K8N1.
+ *  FIFO lvl3 - 14 znaků.
  *  */
 void setup_uarts(){
 
@@ -167,28 +182,18 @@ void setup_uarts(){
 
 }
 
-void eeprom_write(){
-	if(eeprom_lenght >= PROTOCOL_LENGTH){
-		if(eeprom_buffer[0] == 0x43){
-			Chip_EEPROM_Write(LPC_EEPROM, 0, PAGE_ADDR, eeprom_buffer, EEPROM_RWSIZE_8BITS, eeprom_lenght);
-			memset(eeprom_buffer,0,eeprom_lenght); // Vynulování dat v bufferu
-			eeprom_lenght = 0;
-		}
-	}
-}
-
 
 /*****************************************************************************
  * Main functions
  ****************************************************************************/
 
-/*
+/* Přerušení..
  * UART0 - Konfigurace mac/ip adresy
  * UART2 - Pro konektory J4 - 5 na desce
  * UART4 - Pro debug test (konektory J6 - 7)
  *
- * Přijímání dat po bajtu od zařízení jennic a ukládání
- * do kruhového bufferu
+ * Přijímání dat po bajtu od zařízení JN5148 a ukládání
+ * do kruhového bufferu.
  */
 void __lpc1788_isr_uart0(void) {
 	while (UART_LSR_RDR & Chip_UART_ReadLineStatus(UART0)) {
@@ -215,9 +220,10 @@ void __lpc1788_isr_uart4(void) {
 
 /* Přeposílání jednotlivých zpráv na ethernet
  *
- * Každá přijatethernet_transmitá zpráva ukončená znakem 0x0A
- * se odesílá jednotlivě se zpožděním
- * kvůli synchronizaci přenosu
+ * Funkce filtruje zprávy, které začínaji znakem #.
+ * Každá přijatá zpráva ukončená znakem 0x0A se odesílá
+ * jednotlivě se zpožděním kvůli synchronizaci přenosu.
+ * Před každým odesláním packetu prečte data z paměti.
  *  */
 void ethernet_transmit(){
 		switch (state) {
@@ -286,6 +292,7 @@ void ethernet_transmit(){
 				delayMs(3);
 				UDP_packet_send((char*) buffer, message_lenght,destination_addr,
 						source_addr,source_ip,destination_ip);
+
 				memset(buffer,0,message_lenght); // Vynulování přeposlaných dat v bufferu
 				message_lenght = 0;
 				state = WAIT_FOR_DATA;
