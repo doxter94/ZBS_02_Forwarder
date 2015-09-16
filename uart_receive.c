@@ -44,6 +44,8 @@ static uint8_t message_lenght;
 
 static uint8_t eeprom_lenght;
 
+static uint8_t count;
+
 /* Destination MAC addr */
 static char destination_addr[6] = "\x00\x1e\x0b\x3e\xe3\xb3";
 /* Source MAC addr */
@@ -102,12 +104,12 @@ void uart_debug(const char * text, LPC_USART_T *pUART){
 
 /* Zápis do paměti eeprom podle určeného protokolu. */
 void eeprom_write(){
-	if(eeprom_lenght >= PROTOCOL_LENGTH){
-		static uint8_t count = 0;
+	while(eeprom_lenght >= PROTOCOL_LENGTH){
 		if(eeprom_buffer[count] == CONFIG_CHAR){
 			Chip_EEPROM_Write(LPC_EEPROM, 0, PAGE_ADDR, eeprom_buffer + count, EEPROM_RWSIZE_8BITS, eeprom_lenght - count);
 			memset(eeprom_buffer,0,eeprom_lenght); // Vynulování dat v bufferu
 			eeprom_lenght = 0;
+			count = 0;
 		} else{
 			count++;
 		}
