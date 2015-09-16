@@ -14,6 +14,7 @@ void enet_setup();
 
 void enet_init();
 
-void UDP_packet_send(char * data, uint8_t length);
+bool UDP_packet_send(char * data, uint8_t length,char destination_addr[6],
+		char source_addr[6],char source_ip[4],char destination_ip[4]);
 
 #endif /* ETHERNET_H_ */

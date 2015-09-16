@@ -226,7 +226,8 @@ uint16_t udp_header_checksum(const uint16_t source_ip, const uint16_t destinatio
  * 	data - pole obsahující data k odeslání
  * 	length - délka přijatých dat
  *  */
-bool UDP_packet_send(char * data, uint8_t length){
+bool UDP_packet_send(char * data, uint8_t length,char destination_addr[6],
+		char source_addr[6],char source_ip[4],char destination_ip[4]){
 	static uint16_t ip_checksum; //calc later
 	//static uint16_t udp_checksum; //calc later
 	const uint8_t total_length = length + 28;
@@ -236,15 +237,6 @@ bool UDP_packet_send(char * data, uint8_t length){
 	static uint8_t *buffer;
 
 	buffer = ENET_TXBuffGet();
-
-	/* Destination MAC addr */
-	const char destination_addr[6] = "\x6c\x62\x7d\x8a\x53\x3f";
-	/* Source MAC addr */
-	const char source_addr[6] = "\x6c\x62\x7d\x8a\x53\x3e";
-	/* Source ip */
-	const char source_ip[4] = "\xc0\xa8\x01\x01";
-	/* Destination ip */
-	const char destination_ip[4] = "\xc0\xa8\x01\x02";
 
 	memcpy(buffer,destination_addr,6); //Destination MAC (0 - 5)
 

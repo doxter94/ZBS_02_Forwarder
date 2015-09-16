@@ -6,6 +6,10 @@
 #include "ethernet.h"
 #include "uart_receive.h"
 
+/* Page used for storage */
+#define PAGE_ADDR       0x01/* Page number */
+
+
 /*****************************************************************************
  * Private functions
  ****************************************************************************/
@@ -25,14 +29,18 @@ int main(void) {
 	Chip_GPIO_Init(LPC_GPIO);
 
 	enet_init();
+	eeprom_init();
 	setup_uarts();
 
 	//***********************************************
 	// Hlavni smycka
 	//***********************************************
-	//uart_debug("Start!\r\n",LPC_UART0);
+
 	while (1) {
+
+		eeprom_write();
 		ethernet_transmit();
+
 	}
 
 	return EXIT_FAILURE;

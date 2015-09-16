@@ -6,16 +6,26 @@
 #include "chip.h"
 #include "ethernet.h"
 
+/*****************************************************************************
+ * Defines
+ ****************************************************************************/
+
 #define UART0 (LPC_UART0)
 #define UART2 (LPC_UART2)
 #define UART4 (LPC_UART4)
-
 #define BLUE_LED_GPIO_PORT (2)
 #define BLUE_LED_GPIO_PIN (3)
 #define RED_LED_GPIO_PORT (2)
 #define RED_LED_GPIO_PIN (4)
-#define LAST_CHAR 0x0A
-#define MAX_LENGHT 127
+
+#define LAST_CHAR	0x0A
+#define FIRST_CHAR	0x23
+#define MAX_LENGHT	254
+#define PROTOCOL_LENGTH	25
+/* Page used for storage */
+#define PAGE_ADDR	0x01
+#define BUF_CONSUMER_PLUS1 (buf_uart.consumer = (buf_uart.consumer + 1)% MAX_LENGHT)
+#define BUF_PRODUCER_PLUS1 (buf_uart.producer = (buf_uart.producer + 1)% MAX_LENGHT)
 
 /*****************************************************************************
  * Variables
@@ -25,13 +35,37 @@ static uint8_t read_byte;
 
 static uint8_t buffer[MAX_LENGHT];
 
+static uint8_t eeprom_buffer[EEPROM_PAGE_SIZE];
+
+static uint8_t eeprom_read[EEPROM_PAGE_SIZE];
+
 static uint8_t message_lenght;
 
-uint32_t curent_byte;
+static uint8_t eeprom_lenght;
+
+/* Destination MAC addr */
+static char destination_addr[6] = "\x00\x1e\x0b\x3e\xe3\xb3";
+/* Source MAC addr */
+static char source_addr[6] = "\x6c\x62\x7d\x8a\x53\x3e";
+/* Source ip */
+static char source_ip[4] = "\xc0\xa8\x01\x01";
+/* Destination ip */
+static char destination_ip[4] = "\xc0\xa8\x00\xd0";
+
 
 /*****************************************************************************
  * Private functions
  ****************************************************************************/
+
+enum transmit_state{
+	WAIT_FOR_DATA,
+	WRONG_MESSAGE,
+	RIGHT_MESSAGE,
+	ETHERNET_TRANSMIT
+};
+
+static enum transmit_state state = WAIT_FOR_DATA;
+
 
 typedef struct {
 	uint8_t buffer[MAX_LENGHT];
@@ -59,17 +93,22 @@ static bool empty_buffer(Buffer_t * buffer) {
 void uart_debug(const char * text, LPC_USART_T *pUART){
 	uint16_t numBytes = 0;
 	const char * text_iterace = text;
-
 	while (*text_iterace++) {
 		numBytes++;
 	}
-
 	Chip_UART_SendBlocking(pUART, text, numBytes);
 }
 
 /*****************************************************************************
  * Initialization
  ****************************************************************************/
+
+void eeprom_init(){
+
+	/* Init EEPROM */
+	Chip_EEPROM_Init(LPC_EEPROM);
+
+}
 
 /* Init seriové linky a pinů určených k přenosu dat
  * Nastavení UARTu: 115.2K8N1
@@ -128,12 +167,23 @@ void setup_uarts(){
 
 }
 
+void eeprom_write(){
+	if(eeprom_lenght >= PROTOCOL_LENGTH){
+		if(eeprom_buffer[0] == 0x43){
+			Chip_EEPROM_Write(LPC_EEPROM, 0, PAGE_ADDR, eeprom_buffer, EEPROM_RWSIZE_8BITS, eeprom_lenght);
+			memset(eeprom_buffer,0,eeprom_lenght); // Vynulování dat v bufferu
+			eeprom_lenght = 0;
+		}
+	}
+}
+
+
 /*****************************************************************************
  * Main functions
  ****************************************************************************/
 
 /*
- * UART0 - Pro test UARTu0
+ * UART0 - Konfigurace mac/ip adresy
  * UART2 - Pro konektory J4 - 5 na desce
  * UART4 - Pro debug test (konektory J6 - 7)
  *
@@ -141,20 +191,17 @@ void setup_uarts(){
  * do kruhového bufferu
  */
 void __lpc1788_isr_uart0(void) {
-
 	while (UART_LSR_RDR & Chip_UART_ReadLineStatus(UART0)) {
-		read_byte = Chip_UART_ReadByte(UART0);
-		buf_uart.buffer[buf_uart.producer] = read_byte;
-		buf_uart.producer = (buf_uart.producer + 1)% MAX_LENGHT;
+		eeprom_buffer[eeprom_lenght] = Chip_UART_ReadByte(UART0);
+		eeprom_lenght++;
 	}
 }
 
 void __lpc1788_isr_uart2(void) {
-
 	while (UART_LSR_RDR & Chip_UART_ReadLineStatus(UART2)) {
 		read_byte = Chip_UART_ReadByte(UART2);
 		buf_uart.buffer[buf_uart.producer] = read_byte;
-		buf_uart.producer = (buf_uart.producer + 1)% MAX_LENGHT;
+		BUF_PRODUCER_PLUS1;
 	}
 }
 
@@ -162,30 +209,88 @@ void __lpc1788_isr_uart4(void) {
 	while (UART_LSR_RDR & Chip_UART_ReadLineStatus(LPC_UART4)) {
 		read_byte = Chip_UART_ReadByte(LPC_UART4);
 		buf_uart.buffer[buf_uart.producer] = read_byte;
-		buf_uart.producer = (buf_uart.producer + 1)% MAX_LENGHT;
+		BUF_PRODUCER_PLUS1;
 	}
 }
 
 /* Přeposílání jednotlivých zpráv na ethernet
  *
- * Každá přijatá zpráva ukončená znakem 0x0A
+ * Každá přijatethernet_transmitá zpráva ukončená znakem 0x0A
  * se odesílá jednotlivě se zpožděním
  * kvůli synchronizaci přenosu
  *  */
 void ethernet_transmit(){
-	while(!empty_buffer(&buf_uart)){
-		/* Kontrola dat v bufferu */
-		if(buf_uart.buffer[buf_uart.consumer] == LAST_CHAR){
-			delayMs(3);
-			UDP_packet_send((char*) buffer, message_lenght);
-			memset(buffer,0,message_lenght); // Vynulování přeposlaných dat v bufferu
-			message_lenght = 0;
-			buf_uart.consumer = (buf_uart.consumer + 1)% MAX_LENGHT;
+		switch (state) {
+			case WAIT_FOR_DATA: {
+				while(!empty_buffer(&buf_uart)){
+					if(buf_uart.buffer[buf_uart.consumer] == FIRST_CHAR){
+						BUF_CONSUMER_PLUS1;
+						state = WRONG_MESSAGE;
+						break;
+					}
+					if(buf_uart.buffer[buf_uart.consumer] == LAST_CHAR){
+						BUF_CONSUMER_PLUS1;
+						break;
+					}
+					state = RIGHT_MESSAGE;
+					break;
+				}
+				break;
+			}
+			case WRONG_MESSAGE: {
+				while(!empty_buffer(&buf_uart)){
+					if(buf_uart.buffer[buf_uart.consumer] != LAST_CHAR){
+						BUF_CONSUMER_PLUS1;
+					} else{
+						BUF_CONSUMER_PLUS1;
+						state = WAIT_FOR_DATA;
+						break;
+					}
+				}
+				break;
+			}
+			case RIGHT_MESSAGE: {
+				while(!empty_buffer(&buf_uart)){
+					if(buf_uart.buffer[buf_uart.consumer] == FIRST_CHAR){
+						state = WRONG_MESSAGE;
+						break;
+					}
+					if(buf_uart.buffer[buf_uart.consumer] != LAST_CHAR){
+						buffer[message_lenght] = buf_uart.buffer[buf_uart.consumer];
+						BUF_CONSUMER_PLUS1;
+						message_lenght++;
+					} else{
+						buffer[message_lenght] = buf_uart.buffer[buf_uart.consumer];
+						BUF_CONSUMER_PLUS1;
+						message_lenght++;
+						state = ETHERNET_TRANSMIT;
+						break;
+					}
+				}
+				break;
+			}
+			case ETHERNET_TRANSMIT: {
 
-		} else{
-			buffer[message_lenght] = buf_uart.buffer[buf_uart.consumer];
-			buf_uart.consumer = (buf_uart.consumer + 1)% MAX_LENGHT;
-			message_lenght++;
+				/* Read all data from EEPROM page*/
+				Chip_EEPROM_Read(LPC_EEPROM, 0, PAGE_ADDR, eeprom_read, EEPROM_RWSIZE_8BITS, EEPROM_PAGE_SIZE);
+
+				/* Destination address */
+				memcpy(destination_addr,(char*)eeprom_read + 2, sizeof(destination_addr));
+				/* Source address */
+				memcpy(source_addr,(char*)eeprom_read + 9, sizeof(source_addr));
+				/* Source ip */
+				memcpy(source_ip,(char*)eeprom_read + 16, sizeof(source_ip));
+				/* Destination ip */
+				memcpy(destination_ip,(char*)eeprom_read + 21, sizeof(destination_ip));
+
+				delayMs(3);
+				UDP_packet_send((char*) buffer, message_lenght,destination_addr,
+						source_addr,source_ip,destination_ip);
+				memset(buffer,0,message_lenght); // Vynulování přeposlaných dat v bufferu
+				message_lenght = 0;
+				state = WAIT_FOR_DATA;
+				break;
+			}
+
 		}
-	}
 }

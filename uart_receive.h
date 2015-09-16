@@ -3,7 +3,11 @@
 
 void setup_uarts();
 
+void eeprom_init();
+
 void ethernet_transmit();
+
+void eeprom_write();
 
 void uart_debug(const char * text, LPC_USART_T *pUART);
 
